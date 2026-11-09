@@ -1,0 +1,9 @@
+build/
+build.sh
+*.apk
+*.idsig
+*.jks
+*.keystore
+*.class
+.DS_Store
+.idea/

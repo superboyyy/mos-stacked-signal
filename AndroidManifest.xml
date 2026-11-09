@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.superboyyy.mosstackedsignal"
+    android:versionCode="2"
+    android:versionName="2.0">
+    <uses-sdk android:minSdkVersion="30" android:targetSdkVersion="36" />
+    <application android:label="MagicOS 11 双卡堆叠状态栏 酷安@熠寻" android:icon="@mipmap/ic_launcher" android:hasCode="true">
+        <meta-data android:name="xposedmodule" android:value="true" />
+        <meta-data android:name="xposeddescription" android:value="MagicOS 11 双卡信号图标纵向堆叠，单卡自动还原。如系统自带「信号堆叠」开关，请将其关闭" />
+        <meta-data android:name="xposedminversion" android:value="93" />
+        <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
+        <!-- 桌面图标名（LSPosed 里仍显示应用名） -->
+        <activity android:name=".SettingsActivity"
+            android:label="@string/launcher_name"
+            android:exported="true"
+            android:theme="@android:style/Theme.DeviceDefault.DayNight">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" />
+            </intent-filter>
+        </activity>
+        <!-- 只读设置接口：SystemUI 里的 hook 从这里读设置；开机未解锁时也能用 -->
+        <provider android:name=".SettingsProvider"
+            android:authorities="com.superboyyy.mosstackedsignal.settings"
+            android:exported="true"
+            android:directBootAware="true" />
+    </application>
+</manifest>
