@@ -53,6 +53,13 @@ final class SignalInfo {
         return result;
     }
 
+    /** 上下行图标的 id，没显示时为 -1；用来廉价地判断箭头有没有变。 */
+    static int inoutIconId(View simView) {
+        View inout = StatusBarViews.findIn(simView, StatusBarViews.idMobileInout);
+        if (!(inout instanceof ImageView) || inout.getVisibility() != View.VISIBLE) return -1;
+        return ((ImageView) inout).getDrawable() == null ? -1 : StatusBarViews.iconId((ImageView) inout);
+    }
+
     static int activityFromIconName(String name) {
         if (name.endsWith("inout")) return ACTIVITY_INOUT;
         if (name.endsWith("_out")) return ACTIVITY_OUT;

@@ -7,6 +7,7 @@ import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
+import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 
 import java.util.Collections;
@@ -16,7 +17,7 @@ import java.util.WeakHashMap;
 
 /**
  * 双卡时把 mobile_combo 里的两张卡宽度压成 0，自己在外层 FrameLayout 的 overlay 上画两行堆叠信号；
- * 只剩一张卡时还原。
+ * 只剩一张卡时还原。宽度在测量阶段强制，不改 LayoutParams（新版系统会把它重置回去）。
  */
 final class SignalStacker {
     private static final float BATTERY_GLYPH_RATIO = 40f / 54f;
@@ -38,6 +39,43 @@ final class SignalStacker {
                 apply(view);
             }
         });
+    }
+
+    static void beforeMeasure(LinearLayout view, XC_MethodHook.MethodHookParam param) {
+        int comboId = StatusBarViews.idMobileCombo;
+        if (comboId == 0) return;
+        if (view.getId() == comboId) {
+            FrameLayout frame = frameOf(view);
+            StackedSignalDrawable overlay = frame == null ? null : OVERLAYS.get(frame);
+            if (overlay != null && overlay.width > 0 && overlay.viewH > 0) {
+                param.args[0] = View.MeasureSpec.makeMeasureSpec(overlay.width, View.MeasureSpec.EXACTLY);
+                param.args[1] = View.MeasureSpec.makeMeasureSpec(overlay.viewH, View.MeasureSpec.EXACTLY);
+            }
+            return;
+        }
+        ViewParent parent = view.getParent();
+        if (parent instanceof LinearLayout && ((View) parent).getId() == comboId) {
+            FrameLayout frame = frameOf((LinearLayout) parent);
+            if (frame != null && OVERLAYS.containsKey(frame)) {
+                param.args[0] = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.EXACTLY);
+            }
+        }
+    }
+
+    /** 子 View 的测量规格没变时系统会跳过 onMeasure，所以两张卡也要一起请求重新布局。 */
+    private static void remeasure(LinearLayout combo) {
+        for (int i = 0; i < combo.getChildCount(); i++) combo.getChildAt(i).requestLayout();
+        combo.requestLayout();
+    }
+
+    /** 新版系统自带堆叠信号，开着时会隐藏 mobile_combo、显示自己的图标；以模块为准，把它藏回去。 */
+    private static void hideNativeStack(FrameLayout frame, LinearLayout combo) {
+        View nativeStack = StatusBarViews.findIn(frame, StatusBarViews.idNativeStack);
+        if (nativeStack != null && nativeStack.getVisibility() != View.GONE) {
+            nativeStack.setVisibility(View.GONE);
+            StatusBarViews.logOnChange("native stack", "hidden");
+        }
+        if (combo.getVisibility() != View.VISIBLE) combo.setVisibility(View.VISIBLE);
     }
 
     static View comboAncestor(View view) {
@@ -87,9 +125,12 @@ final class SignalStacker {
             OVERLAYS.put(frame, overlay);
             added = true;
         }
+        int oldWidth = overlay.width, oldViewH = overlay.viewH;
         boolean changed = overlay.update(combo, blockH, viewH);
-        for (int i = 0; i < combo.getChildCount(); i++) StatusBarViews.setWidth(combo.getChildAt(i), 0);
-        StatusBarViews.setSize(combo, overlay.width, viewH);
+        hideNativeStack(frame, combo);
+        if (added || oldWidth != overlay.width || oldViewH != overlay.viewH || combo.getWidth() != overlay.width) {
+            remeasure(combo);
+        }
         layoutOverlay(frame, overlay);
         if (changed || added) {
             frame.invalidate();
@@ -104,8 +145,7 @@ final class SignalStacker {
             frame.getOverlay().remove(overlay);
             StatusBarViews.log("restored single sim");
         }
-        for (int i = 0; i < combo.getChildCount(); i++) StatusBarViews.restoreSize(combo.getChildAt(i));
-        StatusBarViews.restoreSize(combo);
+        remeasure(combo);
     }
 
     /** 状态栏图标的行高：取 WiFi 图标的高度，没有 WiFi 时取信号图标的高度。 */

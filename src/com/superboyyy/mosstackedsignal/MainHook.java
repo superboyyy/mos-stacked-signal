@@ -1,6 +1,7 @@
 package com.superboyyy.mosstackedsignal;
 
 import android.view.View;
+import android.widget.LinearLayout;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -17,6 +18,13 @@ public class MainHook implements IXposedHookLoadPackage {
         if (lpparam.processName != null && !StatusBarViews.SYSTEMUI.equals(lpparam.processName)) return;
         StatusBarViews.log("handleLoadPackage hit for " + lpparam.processName);
         ClassLoader cl = lpparam.classLoader;
+
+        hook(LinearLayout.class, "onMeasure", new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                SignalStacker.beforeMeasure((LinearLayout) param.thisObject, param);
+            }
+        });
 
         XC_MethodHook onCluster = new XC_MethodHook() {
             @Override

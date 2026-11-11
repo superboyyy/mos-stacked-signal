@@ -7,14 +7,14 @@ import android.graphics.Canvas;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.util.Log;
+import android.util.SparseArray;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import de.robv.android.xposed.XposedHelpers;
-
+import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -24,6 +24,7 @@ final class StatusBarViews {
     static final String TAG = "STACKEDSTATUS";
 
     static int idMobileCombo;
+    static int idNativeStack;
     static int idMobileSignal;
     static int idMobileInout;
     static int idWifiCombo;
@@ -36,8 +37,9 @@ final class StatusBarViews {
     static int idContents;
     private static boolean idsResolved;
 
-    private static final Map<View, Integer> ORIGINAL_WIDTH = new WeakHashMap<>();
-    private static final Map<View, Integer> ORIGINAL_HEIGHT = new WeakHashMap<>();
+    private static final Map<View, SparseArray<WeakReference<View>>> FIND_CACHE = new WeakHashMap<>();
+    private static final Map<View, WeakReference<View>> BATTERY_OF = new WeakHashMap<>();
+    private static final Map<String, Map<Class<?>, Object>> FIELDS = new HashMap<>();
     private static final Map<String, String> LAST_LOG = new HashMap<>();
     private static final int[] LOCATION = new int[2];
     private static Typeface clockTypeface;
@@ -47,6 +49,7 @@ final class StatusBarViews {
     static void resolveIds(Resources res) {
         if (idsResolved) return;
         idMobileCombo = id(res, "mobile_combo");
+        idNativeStack = id(res, "hn_stacked_signal_icon");
         idMobileSignal = id(res, "mobile_signal");
         idMobileInout = id(res, "mobile_inout");
         idWifiCombo = id(res, "wifi_combo");
@@ -65,8 +68,33 @@ final class StatusBarViews {
         return res.getIdentifier(name, "id", SYSTEMUI);
     }
 
+    /** 每帧都要找同几个 View，按 (根 View, id) 缓存，用前确认它还挂在这个根下面。 */
     static View findIn(View root, int id) {
-        return id == 0 ? null : root.findViewById(id);
+        if (id == 0 || root == null) return null;
+        SparseArray<WeakReference<View>> cache = FIND_CACHE.get(root);
+        if (cache != null) {
+            WeakReference<View> ref = cache.get(id);
+            View cached = ref == null ? null : ref.get();
+            if (cached != null && cached.getId() == id && isUnder(cached, root)) return cached;
+        }
+        View found = root.findViewById(id);
+        if (found != null) {
+            if (cache == null) {
+                cache = new SparseArray<>();
+                FIND_CACHE.put(root, cache);
+            }
+            cache.put(id, new WeakReference<>(found));
+        }
+        return found;
+    }
+
+    private static boolean isUnder(View view, View root) {
+        for (int depth = 0; view != null && depth < 32; depth++) {
+            if (view == root) return true;
+            ViewParent parent = view.getParent();
+            view = parent instanceof View ? (View) parent : null;
+        }
+        return false;
     }
 
     static View ancestorWithId(View view, int id) {
@@ -84,6 +112,15 @@ final class StatusBarViews {
 
     static View findBattery(View view) {
         if (idBattery == 0) return null;
+        WeakReference<View> ref = BATTERY_OF.get(view);
+        View cached = ref == null ? null : ref.get();
+        if (cached != null && cached.getParent() != null && cached.getRootView() == view.getRootView()) return cached;
+        View found = searchBattery(view);
+        if (found != null) BATTERY_OF.put(view, new WeakReference<>(found));
+        return found;
+    }
+
+    private static View searchBattery(View view) {
         for (ViewParent p = view.getParent(); p instanceof View; p = p.getParent()) {
             View parent = (View) p;
             View battery = parent.findViewById(idBattery);
@@ -111,11 +148,18 @@ final class StatusBarViews {
         return LOCATION[1];
     }
 
+    /** 图标的资源 id；读不到时返回 drawable 的身份哈希，只能用来比较是否换了图标。 */
+    static int iconId(ImageView view) {
+        Drawable d = view.getDrawable();
+        return d == null ? 0 : intFieldOr(d, "iconId", System.identityHashCode(d));
+    }
+
     static String iconName(ImageView view) {
         Drawable d = view.getDrawable();
-        if (d == null) return null;
+        int id = d == null ? 0 : intFieldOr(d, "iconId", 0);
+        if (id == 0) return null;
         try {
-            return view.getResources().getResourceEntryName(XposedHelpers.getIntField(d, "iconId"));
+            return view.getResources().getResourceEntryName(id);
         } catch (Throwable t) {
             return null;
         }
@@ -124,48 +168,38 @@ final class StatusBarViews {
     static int tintColor(ImageView view, int fallback) {
         ColorStateList tint = view.getImageTintList();
         if (tint != null) return tint.getDefaultColor();
+        return intFieldOr(view, "mDefaultColor", fallback);
+    }
+
+    /** 反射读 int 字段，字段不存在时返回默认值而不抛异常（每帧调用，异常很贵）。 */
+    static int intFieldOr(Object target, String name, int fallback) {
+        if (target == null) return fallback;
+        Map<Class<?>, Object> byClass = FIELDS.get(name);
+        if (byClass == null) {
+            byClass = new HashMap<>();
+            FIELDS.put(name, byClass);
+        }
+        Class<?> cls = target.getClass();
+        Object field = byClass.get(cls);
+        if (field == null) {
+            field = Boolean.FALSE;
+            for (Class<?> c = cls; c != null; c = c.getSuperclass()) {
+                try {
+                    Field f = c.getDeclaredField(name);
+                    f.setAccessible(true);
+                    field = f;
+                    break;
+                } catch (Throwable ignored) {
+                }
+            }
+            byClass.put(cls, field);
+        }
+        if (!(field instanceof Field)) return fallback;
         try {
-            return XposedHelpers.getIntField(view, "mDefaultColor");
+            return ((Field) field).getInt(target);
         } catch (Throwable t) {
             return fallback;
         }
-    }
-
-    static void setWidth(View view, int width) {
-        ViewGroup.LayoutParams lp = view == null ? null : view.getLayoutParams();
-        if (lp == null) return;
-        if (!ORIGINAL_WIDTH.containsKey(view)) ORIGINAL_WIDTH.put(view, lp.width);
-        if (lp.width == width) return;
-        lp.width = width;
-        view.setLayoutParams(lp);
-    }
-
-    static void setSize(View view, int width, int height) {
-        ViewGroup.LayoutParams lp = view.getLayoutParams();
-        if (lp == null) return;
-        if (!ORIGINAL_WIDTH.containsKey(view)) ORIGINAL_WIDTH.put(view, lp.width);
-        if (!ORIGINAL_HEIGHT.containsKey(view)) ORIGINAL_HEIGHT.put(view, lp.height);
-        if (lp.width == width && lp.height == height) return;
-        lp.width = width;
-        lp.height = height;
-        view.setLayoutParams(lp);
-    }
-
-    static void restoreSize(View view) {
-        ViewGroup.LayoutParams lp = view.getLayoutParams();
-        if (lp == null) return;
-        Integer width = ORIGINAL_WIDTH.get(view);
-        Integer height = ORIGINAL_HEIGHT.get(view);
-        boolean changed = false;
-        if (width != null && lp.width != width) {
-            lp.width = width;
-            changed = true;
-        }
-        if (height != null && lp.height != height) {
-            lp.height = height;
-            changed = true;
-        }
-        if (changed) view.setLayoutParams(lp);
     }
 
     static void hideByAlpha(View view) {

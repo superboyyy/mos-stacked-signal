@@ -45,6 +45,7 @@ final class StackedSignalDrawable extends Drawable {
     private int[] counts = new int[0];
     private String[] labels = new String[0];
     private int[] activity = new int[0];
+    private int[] inoutIds = new int[0];
     private float[] labelLeft = new float[0];
     private float[] labelSpacing = new float[0];
     private float[] labelShift = new float[0];
@@ -201,7 +202,17 @@ final class StackedSignalDrawable extends Drawable {
     }
 
     boolean activityChanged(LinearLayout combo) {
-        return !Arrays.equals(SignalInfo.activities(combo), activity);
+        int n = combo.getChildCount();
+        if (inoutIds.length != n) inoutIds = new int[n];
+        boolean iconsChanged = false;
+        for (int i = 0; i < n; i++) {
+            int id = SignalInfo.inoutIconId(combo.getChildAt(i));
+            if (id != inoutIds[i]) {
+                inoutIds[i] = id;
+                iconsChanged = true;
+            }
+        }
+        return iconsChanged && !Arrays.equals(SignalInfo.activities(combo), activity);
     }
 
     String describe() {

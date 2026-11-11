@@ -33,6 +33,8 @@ final class WifiOverlay {
 
     private static final Map<FrameLayout, WifiDrawable> OVERLAYS = new WeakHashMap<>();
     private static final Map<View, String> INOUT_LAYOUT = new WeakHashMap<>();
+    private static final Map<FrameLayout, Long> SIGNATURE = new WeakHashMap<>();
+    private static final int[] LOCATION = new int[2];
     private static String cachedGeneration;
     private static long cachedGenerationAt;
 
@@ -41,12 +43,16 @@ final class WifiOverlay {
     static void sync(View contents) {
         try {
             if (StatusBarViews.idWifiCombo == 0 || StatusBarViews.idWifiSignal == 0) return;
-            View comboView = contents.findViewById(StatusBarViews.idWifiCombo);
+            View comboView = StatusBarViews.findIn(contents, StatusBarViews.idWifiCombo);
             if (!(comboView instanceof FrameLayout)) return;
             FrameLayout combo = (FrameLayout) comboView;
-            View signalView = combo.findViewById(StatusBarViews.idWifiSignal);
+            View signalView = StatusBarViews.findIn(combo, StatusBarViews.idWifiSignal);
             if (!(signalView instanceof ImageView)) return;
             ImageView signal = (ImageView) signalView;
+            long signature = signature(combo, signal);
+            Long last = SIGNATURE.get(combo);
+            if (last != null && last == signature) return;
+            SIGNATURE.put(combo, signature);
             Drawable icon = signal.getDrawable();
 
             int level = -1;
@@ -157,6 +163,40 @@ final class WifiOverlay {
         } catch (Throwable t) {
             XposedBridge.log(t);
         }
+    }
+
+    /** 每帧都会进来：先算一个便宜的状态签名，没变化就跳过后面的正则、取位置和量墨迹。 */
+    private static long signature(FrameLayout combo, ImageView signal) {
+        long h = 17;
+        h = h * 31 + StatusBarViews.iconId(signal);
+        h = h * 31 + Float.floatToIntBits(signal.getAlpha());
+        h = h * 31 + signal.getLeft() * 131 + signal.getTop();
+        h = h * 31 + signal.getWidth() * 131 + signal.getHeight();
+        h = h * 31 + StatusBarViews.tintColor(signal, 0);
+        h = h * 31 + combo.getWidth() * 131 + combo.getHeight();
+        for (int id : new int[] {StatusBarViews.idWifiInout, StatusBarViews.idWifiHotspot, StatusBarViews.idWifiNoInternet}) {
+            View v = StatusBarViews.findIn(combo, id);
+            if (v == null) continue;
+            h = h * 31 + v.getVisibility();
+            h = h * 31 + Float.floatToIntBits(v.getAlpha());
+            h = h * 31 + v.getLeft() * 131 + v.getTop();
+            h = h * 31 + v.getWidth() * 131 + v.getHeight();
+            if (v instanceof ImageView) h = h * 31 + StatusBarViews.iconId((ImageView) v);
+        }
+        View battery = StatusBarViews.findBattery(combo);
+        if (battery != null) {
+            battery.getLocationOnScreen(LOCATION);
+            h = h * 31 + LOCATION[1] * 131 + battery.getHeight();
+            combo.getLocationOnScreen(LOCATION);
+            h = h * 31 + LOCATION[1];
+        }
+        h = h * 31 + (Prefs.wifiReplace ? 1 : 0) + Prefs.wifiStyle * 2;
+        h = h * 31 + Float.floatToIntBits(StackedSignalDrawable.labelStroke);
+        h = h * 31 + Float.floatToIntBits(StackedSignalDrawable.arrowHeight);
+        h = h * 31 + System.identityHashCode(StatusBarViews.clockTypeface(combo));
+        String generation = generationFromStandard(combo.getContext());
+        h = h * 31 + (generation == null ? 0 : generation.hashCode());
+        return h;
     }
 
     private static boolean near(float a, float b) {
