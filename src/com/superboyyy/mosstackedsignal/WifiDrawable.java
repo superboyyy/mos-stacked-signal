@@ -74,7 +74,7 @@ final class WifiDrawable extends Drawable {
     }
 
     private void drawGeneration(Canvas canvas, RectF rect) {
-        text.setTypeface(Typeface.create(typeface != null ? typeface : Typeface.DEFAULT, 700, false));
+        text.setTypeface(Typeface.create(typeface != null ? typeface : Typeface.DEFAULT, StackedSignalDrawable.LABEL_WEIGHT, false));
         text.setStyle(Paint.Style.FILL);
         text.setStrokeWidth(0f);
         text.setTextSize(100f);

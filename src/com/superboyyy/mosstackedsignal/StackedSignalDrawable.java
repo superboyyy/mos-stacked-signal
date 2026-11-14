@@ -27,6 +27,7 @@ final class StackedSignalDrawable extends Drawable {
     private static final float DIM_ALPHA = 0.3f;
     private static final float ARROW_NUDGE_X = -0.6f;
     private static final float MIN_ARROW_HEIGHT = 3f;
+    static final int LABEL_WEIGHT = 650;
 
     /** 标识文字的描边宽度，WiFi 上的 "6" / "7" 跟着用，粗细一致。 */
     static volatile float labelStroke;
@@ -69,7 +70,7 @@ final class StackedSignalDrawable extends Drawable {
         for (int i = 0; i < n; i++) {
             View sim = combo.getChildAt(i);
             int[] level = SignalInfo.level(sim);
-            int count = level != null ? level[1] : 4;
+            int count = level != null ? level[1] : SignalInfo.barCount;
             newCounts[i] = count;
             newLevels[i] = level != null ? Math.max(0, Math.min(level[0], count)) : 0;
             newLabels[i] = SignalInfo.label(sim);
@@ -92,7 +93,7 @@ final class StackedSignalDrawable extends Drawable {
         typeCenterY = batteryCenter(combo);
 
         Typeface clock = StatusBarViews.clockTypeface(combo);
-        textPaint.setTypeface(Typeface.create(clock != null ? clock : Typeface.DEFAULT, 700, false));
+        textPaint.setTypeface(Typeface.create(clock != null ? clock : Typeface.DEFAULT, LABEL_WEIGHT, false));
         textPaint.setStyle(Paint.Style.FILL);
         textPaint.setStrokeWidth(0f);
         textPaint.setTextSize(100f);

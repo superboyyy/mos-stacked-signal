@@ -23,6 +23,9 @@ final class SignalInfo {
     private static final Pattern TYPE_IN_DESCRIPTION = Pattern.compile("^\\s*([0-9A-Za-z+.\\-]{1,6})\\s*[,，]");
     private static final String NO_SERVICE = "×";
 
+    /** 这台手机的信号总格数（4 或 5），取自最近一次认出来的信号图标；无服务的图标名里没有格数，用它补上。 */
+    static int barCount = 4;
+
     private SignalInfo() { }
 
     /** {当前格数, 总格数}；认不出图标时返回 null。 */
@@ -33,8 +36,11 @@ final class SignalInfo {
         if (name == null) return null;
         Matcher m = SIGNAL_ICON.matcher(name);
         if (m.find()) {
-            int levels = m.group(1) != null ? 5 : 4;
-            return new int[] {Integer.parseInt(m.group(2)), levels};
+            barCount = m.group(1) != null ? 5 : 4;
+            return new int[] {Integer.parseInt(m.group(2)), barCount};
+        }
+        if (name.startsWith("stat_sys_signal_") && name.contains("null")) {
+            return new int[] {0, name.contains("five") ? 5 : barCount};
         }
         StatusBarViews.logOnChange("unknown signal icon", name);
         return null;
