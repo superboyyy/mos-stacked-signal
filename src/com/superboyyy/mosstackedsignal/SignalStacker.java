@@ -47,7 +47,7 @@ final class SignalStacker {
         if (view.getId() == comboId) {
             FrameLayout frame = frameOf(view);
             StackedSignalDrawable overlay = frame == null ? null : OVERLAYS.get(frame);
-            if (overlay != null && overlay.width > 0 && overlay.viewH > 0) {
+            if (overlay != null && (overlay.width > 0 || overlay.hidden) && overlay.viewH > 0) {
                 param.args[0] = View.MeasureSpec.makeMeasureSpec(overlay.width, View.MeasureSpec.EXACTLY);
                 param.args[1] = View.MeasureSpec.makeMeasureSpec(overlay.viewH, View.MeasureSpec.EXACTLY);
             }

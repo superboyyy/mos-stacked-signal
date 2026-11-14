@@ -1,6 +1,7 @@
 package com.superboyyy.mosstackedsignal;
 
 import android.graphics.drawable.Drawable;
+import android.provider.Settings;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -58,6 +59,14 @@ final class SignalInfo {
         View inout = StatusBarViews.findIn(simView, StatusBarViews.idMobileInout);
         if (!(inout instanceof ImageView) || inout.getVisibility() != View.VISIBLE) return -1;
         return ((ImageView) inout).getDrawable() == null ? -1 : StatusBarViews.iconId((ImageView) inout);
+    }
+
+    static boolean airplaneMode(View view) {
+        try {
+            return Settings.Global.getInt(view.getContext().getContentResolver(), Settings.Global.AIRPLANE_MODE_ON, 0) == 1;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     static int activityFromIconName(String name) {

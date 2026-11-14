@@ -36,6 +36,8 @@ final class StackedSignalDrawable extends Drawable {
     int blockH;
     int viewH;
     int width;
+    /** 飞行模式：和系统一样不显示信号，宽度收成 0、什么都不画。 */
+    boolean hidden;
     private int pad;
     private int gap;
     private int labelW;
@@ -74,7 +76,8 @@ final class StackedSignalDrawable extends Drawable {
         }
         int[] newActivity = SignalInfo.activities(combo);
         int newColor = SignalInfo.color(combo);
-        boolean changed = newBlockH != blockH || newViewH != viewH || newColor != color
+        boolean airplane = SignalInfo.airplaneMode(combo);
+        boolean changed = airplane != hidden || newBlockH != blockH || newViewH != viewH || newColor != color
                 || !Arrays.equals(newLevels, levels) || !Arrays.equals(newCounts, counts)
                 || !Arrays.equals(newLabels, labels) || !Arrays.equals(newActivity, activity);
         activity = newActivity;
@@ -139,7 +142,8 @@ final class StackedSignalDrawable extends Drawable {
             labelLeft[i] = inkRect.left;
             textPaint.setLetterSpacing(0f);
         }
-        width = pad + (labelW > 0 ? labelW + gap : 0) + barsWidth() + pad;
+        hidden = airplane;
+        width = airplane ? 0 : pad + (labelW > 0 ? labelW + gap : 0) + barsWidth() + pad;
         if (changed) {
             StatusBarViews.log("labels=" + Arrays.toString(newLabels) + " activity=" + Arrays.toString(newActivity)
                     + " ink=" + Arrays.toString(inkWidth) + " spacing=" + Arrays.toString(labelSpacing)
@@ -222,6 +226,7 @@ final class StackedSignalDrawable extends Drawable {
 
     @Override
     public void draw(Canvas canvas) {
+        if (hidden) return;
         Rect bounds = getBounds();
         float top = bounds.top + typeCenterY - blockH / 2f;
         float rowH = rowH();
