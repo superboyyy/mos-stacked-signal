@@ -10,7 +10,7 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 
-/** 自绘 WiFi：扇形（WifiFan）、左上角的 "6" / "7"、无网络 "!"、右下角的上下行箭头。 */
+/** 自绘 WiFi：扇形（WifiFan）、左上角的 "6" / "7"、无网络 "!"、右下角的上下行箭头（后两样可在设置里关掉）。 */
 final class WifiDrawable extends Drawable {
     private static final float ICON_UNITS_W = 73f;
     private static final float ICON_UNITS_H = 60f;
@@ -24,6 +24,8 @@ final class WifiDrawable extends Drawable {
     boolean wide;
     boolean noInternet;
     boolean square;
+    /** 显示 "6" / "7" 等级和上下行箭头（设置里可以关）。 */
+    boolean extras = true;
     int color;
     Typeface typeface;
     float typeStroke;
@@ -59,21 +61,23 @@ final class WifiDrawable extends Drawable {
         labelRect.offset(LABEL_NUDGE_X, 0f);
         if (!Float.isNaN(sevenTop)) labelRect.offsetTo(labelRect.left, sevenTop - 1f);
 
+        // 关掉「显示 WiFi 等级和上下行箭头」时不画 "6" / "7"，最外一条也不用让位
+        String gen = extras ? this.gen : null;
         WifiFan.draw(canvas, paint, path, oval, square, cx, cy, f, level, color, alpha, Math.round(alpha * DIM_ALPHA),
                 gen != null ? labelRect : null, ux * 1.5f);
-        if (gen != null) drawGeneration(canvas, labelRect);
+        if (gen != null) drawGeneration(canvas, labelRect, gen);
         if (noInternet) {
             drawNoInternet(canvas, cx, cy, f, dot, stroke, gap, alpha);
             return;
         }
-        if (activity < 0 || inoutInk.width() <= 0f) return;
+        if (!extras || activity < 0 || inoutInk.width() <= 0f) return;
         float shared = StackedSignalDrawable.arrowHeight;
         float h = shared > 0f ? shared : inoutInk.width() / ArrowPainter.widthPerHeight();
         float left = 1f + Math.max(inoutInk.right - ArrowPainter.widthPerHeight() * h, cx + dot + 0.25f * h);
         arrows.draw(canvas, paint, left, inoutInk.bottom - h, inoutInk.bottom, activity, color, alpha);
     }
 
-    private void drawGeneration(Canvas canvas, RectF rect) {
+    private void drawGeneration(Canvas canvas, RectF rect, String gen) {
         text.setTypeface(Typeface.create(typeface != null ? typeface : Typeface.DEFAULT, StackedSignalDrawable.LABEL_WEIGHT, false));
         text.setStyle(Paint.Style.FILL);
         text.setStrokeWidth(0f);

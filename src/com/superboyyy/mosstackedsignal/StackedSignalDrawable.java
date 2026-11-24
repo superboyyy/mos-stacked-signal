@@ -9,12 +9,16 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.text.TextUtils;
 import android.view.View;
 import android.widget.LinearLayout;
 
 import java.util.Arrays;
 
-/** 两行堆叠的信号：每行 "网络类型 + 信号格"，流量箭头画在信号格左上方的空白里。 */
+/**
+ * 两行堆叠的信号：每行 "网络类型 + 信号格"，流量箭头画在信号格左上方的空白里。
+ * 感叹号样式（IosSignal）：上排竖条是卡 1、下排的点是卡 2；网络类型画在左上方，下面一列 ^ˇ 是上下行。
+ */
 final class StackedSignalDrawable extends Drawable {
     private static final float SIDE_PAD_DP = 1.75f;
     private static final float LABEL_GAP_DP = 2f;
@@ -28,6 +32,16 @@ final class StackedSignalDrawable extends Drawable {
     private static final float ARROW_NUDGE_X = -0.6f;
     private static final float MIN_ARROW_HEIGHT = 3f;
     static final int LABEL_WEIGHT = 650;
+    /** 感叹号样式的列数。 */
+    private static final int IOS_COLUMNS = 5;
+    /** 感叹号样式：网络类型墨迹高 = 信号高度的这么多（再大第一列竖条就要压矮，和下面的点不一样高了）。 */
+    private static final float IOS_LABEL_RATIO = 0.45f;
+    /** 感叹号样式：网络类型和被它盖住的竖条之间的空隙。 */
+    private static final float IOS_LABEL_MARGIN = 0.05f;
+    /** 感叹号样式的 ^ˇ：宽、线粗、和第一列竖条的固定间距（都按信号高度算，不随网络类型的宽度变）。 */
+    private static final float IOS_ARROW_W = 0.24f;
+    private static final float IOS_ARROW_STROKE = 0.07f;
+    private static final float IOS_ARROW_GAP = 0.08f;
 
     /** 标识文字的描边宽度，WiFi 上的 "6" / "7" 跟着用，粗细一致。 */
     static volatile float labelStroke;
@@ -61,6 +75,21 @@ final class StackedSignalDrawable extends Drawable {
     private final Rect textBounds = new Rect();
     private final ArrowPainter arrows = new ArrowPainter();
 
+    // 感叹号样式
+    private boolean ios;
+    private float iosBarsW;
+    private float[] iosBarH = new float[0];
+    /** 数据卡的网络类型（不显示标识时为 null）和它的墨迹尺寸。 */
+    private String iosLabel;
+    private float iosLabelW, iosLabelInkLeft, iosLabelInkTop, iosLabelInkH;
+    /** 网络类型和 ^ˇ 往信号格左边伸出去的宽度。 */
+    private float iosLeftExtra;
+    /** 数据卡的上下行状态；系统显示数据卡箭头时（和圆润 / 方正一样）才画 ^ˇ。 */
+    private int iosAct = -1;
+    private boolean iosArrows;
+    private final Paint iosLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+    private final Path arrowPath = new Path();
+
     boolean update(LinearLayout combo, int newBlockH, int newViewH) {
         float density = combo.getResources().getDisplayMetrics().density;
         int n = combo.getChildCount();
@@ -79,10 +108,32 @@ final class StackedSignalDrawable extends Drawable {
         int[] newActivity = SignalInfo.activities(combo);
         int newColor = SignalInfo.color(combo);
         boolean airplane = SignalInfo.airplaneMode(combo);
-        boolean changed = airplane != hidden || newBlockH != blockH || newViewH != viewH || newColor != color
+        // 感叹号样式只显示数据卡（有上下行箭头的那张）的网络类型，同样受「显示网络类型标识」「仅当使用流量时显示」控制
+        boolean newIos = Prefs.isIos(Prefs.style);
+        String newIosLabel = null;
+        int newIosAct = -1;
+        if (newIos && !airplane && n > 0) {
+            int ds = 0;
+            for (int k = 0; k < newActivity.length; k++) {
+                if (newActivity[k] >= 0) {
+                    ds = k;
+                    break;
+                }
+            }
+            ds = Math.min(ds, n - 1);
+            newIosLabel = newLabels[ds];
+            newIosAct = ds < newActivity.length ? newActivity[ds] : -1;
+        }
+        boolean newIosArrows = newIosLabel != null && newIosAct >= 0;
+        boolean changed = newIos != ios || !TextUtils.equals(newIosLabel, iosLabel) || newIosArrows != iosArrows
+                || airplane != hidden || newBlockH != blockH || newViewH != viewH || newColor != color
                 || !Arrays.equals(newLevels, levels) || !Arrays.equals(newCounts, counts)
                 || !Arrays.equals(newLabels, labels) || !Arrays.equals(newActivity, activity);
         activity = newActivity;
+        ios = newIos;
+        iosLabel = newIosLabel;
+        iosAct = newIosAct;
+        iosArrows = newIosArrows;
         blockH = newBlockH;
         viewH = newViewH;
         color = newColor;
@@ -146,12 +197,43 @@ final class StackedSignalDrawable extends Drawable {
         }
         hidden = airplane;
         width = airplane ? 0 : pad + (labelW > 0 ? labelW + gap : 0) + barsWidth() + pad;
+        if (ios && !airplane) layoutIos();
         if (changed) {
             StatusBarViews.log("labels=" + Arrays.toString(newLabels) + " activity=" + Arrays.toString(newActivity)
                     + " ink=" + Arrays.toString(inkWidth) + " spacing=" + Arrays.toString(labelSpacing)
                     + " shift=" + Arrays.toString(labelShift));
         }
         return changed;
+    }
+
+    /** 感叹号样式：5 列，总宽和普通样式不显示标识时一样；网络类型右边和第一列竖条右边对齐，往左伸出去。 */
+    private void layoutIos() {
+        iosBarsW = IOS_COLUMNS * barW() + (IOS_COLUMNS - 1) * barSpace();
+        if (iosBarH.length != IOS_COLUMNS) iosBarH = new float[IOS_COLUMNS];
+        float colW = IosSignal.colWidth(iosBarsW, IOS_COLUMNS);
+        float labelH = 0f, margin = 0f;
+        iosLeftExtra = 0f;
+        if (iosLabel != null) {
+            iosLabelPaint.setTypeface(textPaint.getTypeface());
+            iosLabelPaint.setStyle(Paint.Style.FILL);
+            iosLabelPaint.setTextAlign(Paint.Align.LEFT);
+            iosLabelPaint.setTextSize(100f);
+            iosLabelPaint.getTextBounds("5G", 0, 2, textBounds);
+            if (textBounds.height() > 0) iosLabelPaint.setTextSize(blockH * IOS_LABEL_RATIO * 100f / textBounds.height());
+            inkPath.reset();
+            iosLabelPaint.getTextPath(iosLabel, 0, iosLabel.length(), 0f, 0f, inkPath);
+            inkPath.computeBounds(inkRect, true);
+            iosLabelInkLeft = inkRect.left;
+            iosLabelInkTop = inkRect.top;
+            iosLabelInkH = inkRect.height();
+            iosLabelW = inkRect.width();
+            labelH = iosLabelInkH;
+            margin = blockH * IOS_LABEL_MARGIN;
+            iosLeftExtra = Math.max(iosLabelW - colW, iosArrows ? blockH * (IOS_ARROW_W + IOS_ARROW_STROKE / 2f + IOS_ARROW_GAP) : 0f);
+        }
+        // 网络类型只盖住第一列；第一列竖条比它的下沿低，一般不用压矮
+        IosSignal.barHeights(iosBarH, blockH, iosBarsW, IOS_COLUMNS, iosLabel != null ? colW : 0f, labelH, margin);
+        width = Math.round(pad + iosLeftExtra + iosBarsW + pad);
     }
 
     private void textInk(String text) {
@@ -179,11 +261,11 @@ final class StackedSignalDrawable extends Drawable {
     }
 
     private float minBarH(float rowH) {
-        return Prefs.style == 1 ? rowH * 0.3f : Math.max(barW(), rowH * 0.35f);
+        return Prefs.isSquare(Prefs.style) ? rowH * 0.3f : Math.max(barW(), rowH * 0.35f);
     }
 
     private float barRadius() {
-        return Prefs.style == 1 ? 0f : barW() / 2f;
+        return Prefs.isSquare(Prefs.style) ? 0f : barW() / 2f;
     }
 
     /** 电池图形的垂直中心，相对于本 drawable 顶部；标识和信号格以它为中心。 */
@@ -231,6 +313,10 @@ final class StackedSignalDrawable extends Drawable {
         if (hidden) return;
         Rect bounds = getBounds();
         float top = bounds.top + typeCenterY - blockH / 2f;
+        if (ios) {
+            drawIos(canvas, bounds.left + pad + iosLeftExtra, top);
+            return;
+        }
         float rowH = rowH();
         int rows = Math.min(levels.length, 2);
         int alpha = color >>> 24;
@@ -260,6 +346,52 @@ final class StackedSignalDrawable extends Drawable {
                 x += barW() + barSpace();
             }
         }
+    }
+
+    private void drawIos(Canvas canvas, float colLeft, float top) {
+        int alpha = color >>> 24, dim = Math.round(alpha * DIM_ALPHA);
+        if (iosLabel != null) {
+            // 网络类型：墨迹顶边和最高的竖条顶边对齐，右边和第一列竖条的右边对齐
+            float colW = IosSignal.colWidth(iosBarsW, IOS_COLUMNS);
+            iosLabelPaint.setColor(color);
+            canvas.drawText(iosLabel, colLeft + colW - iosLabelW - iosLabelInkLeft, top - iosLabelInkTop, iosLabelPaint);
+            if (iosArrows) {
+                // 下面一列 ^ˇ（^ 上行、ˇ 下行）：右边和第一列竖条隔开固定的间距；
+                // ^ 的顶边和第一列竖条的顶边对齐，ˇ 的底边和下排点的底边（整组底边）对齐
+                float cw = blockH * IOS_ARROW_W, ch = cw * 0.55f, aGap = blockH * IOS_ARROW_GAP;
+                float half = blockH * IOS_ARROW_STROKE / 2f;
+                float cx = colLeft - aGap - half - cw / 2f;
+                float barsBottom = top + IosSignal.barsRowHeight(blockH, iosBarsW, IOS_COLUMNS);
+                float upTop = barsBottom - (iosBarH.length > 0 ? iosBarH[0] : 0f) + half;
+                float downBottom = top + blockH - half;
+                boolean out = iosAct == SignalInfo.ACTIVITY_OUT || iosAct == SignalInfo.ACTIVITY_INOUT;
+                boolean in = iosAct == SignalInfo.ACTIVITY_IN || iosAct == SignalInfo.ACTIVITY_INOUT;
+                drawChevron(canvas, cx, upTop + ch / 2f, cw, ch, true, out ? alpha : dim);
+                drawChevron(canvas, cx, downBottom - ch / 2f, cw, ch, false, in ? alpha : dim);
+            }
+        }
+        int n = levels.length;
+        IosSignal.draw(canvas, paint, rect, colLeft, top, blockH, iosBarsW, IOS_COLUMNS, iosBarH,
+                n > 0 ? IosSignal.scale(levels[0], counts[0], IOS_COLUMNS) : 0,
+                n > 1 ? IosSignal.scale(levels[1], counts[1], IOS_COLUMNS) : 0,
+                Prefs.isSquare(Prefs.style), color, alpha, dim);
+    }
+
+    /** 画 ^ 或 ˇ：cx、cy 是中心，w 宽 h 高。 */
+    private void drawChevron(Canvas canvas, float cx, float cy, float w, float h, boolean up, int alpha) {
+        arrowPath.reset();
+        float tip = up ? cy - h / 2f : cy + h / 2f, foot = up ? cy + h / 2f : cy - h / 2f;
+        arrowPath.moveTo(cx - w / 2f, foot);
+        arrowPath.lineTo(cx, tip);
+        arrowPath.lineTo(cx + w / 2f, foot);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(blockH * IOS_ARROW_STROKE);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setStrokeJoin(Paint.Join.ROUND);
+        paint.setColor(color);
+        paint.setAlpha(alpha);
+        canvas.drawPath(arrowPath, paint);
+        paint.setStyle(Paint.Style.FILL);
     }
 
     /** 箭头放在前两格上方：底边比第二格顶端高一点，顶边对齐这一行的顶端（含半个行距）。 */

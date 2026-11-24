@@ -131,7 +131,8 @@ final class WifiOverlay {
                 StatusBarViews.hideByAlpha(inout);
             }
 
-            boolean square = Prefs.wifiStyle == 1;
+            boolean square = Prefs.isSquare(Prefs.wifiStyle);
+            boolean extras = Prefs.wifiExtras;
             float labelStroke = StackedSignalDrawable.labelStroke;
             float arrowHeight = StackedSignalDrawable.arrowHeight;
             Rect bounds = wd.getBounds();
@@ -140,7 +141,7 @@ final class WifiOverlay {
                     || wd.wide != wide || wd.color != color || wd.typeface != typeface || !wd.img.equals(img)
                     || bounds.right != combo.getWidth() || bounds.bottom != combo.getHeight()
                     || wd.activity != activity || !wd.inoutInk.equals(ink) || wd.arrowHeight != arrowHeight
-                    || wd.noInternet != noInternet || wd.square != square;
+                    || wd.noInternet != noInternet || wd.square != square || wd.extras != extras;
             if (changed) {
                 wd.level = level;
                 wd.sevenTop = sevenTop;
@@ -150,6 +151,7 @@ final class WifiOverlay {
                 wd.wide = wide;
                 wd.noInternet = noInternet;
                 wd.square = square;
+                wd.extras = extras;
                 wd.color = color;
                 wd.typeface = typeface;
                 wd.img.set(img);
@@ -190,7 +192,7 @@ final class WifiOverlay {
             combo.getLocationOnScreen(LOCATION);
             h = h * 31 + LOCATION[1];
         }
-        h = h * 31 + (Prefs.wifiReplace ? 1 : 0) + Prefs.wifiStyle * 2;
+        h = h * 31 + (Prefs.wifiReplace ? 1 : 0) + Prefs.wifiStyle * 2 + (Prefs.wifiExtras ? 4 : 0);
         h = h * 31 + Float.floatToIntBits(StackedSignalDrawable.labelStroke);
         h = h * 31 + Float.floatToIntBits(StackedSignalDrawable.arrowHeight);
         h = h * 31 + System.identityHashCode(StatusBarViews.clockTypeface(combo));

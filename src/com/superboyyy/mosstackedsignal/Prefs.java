@@ -31,6 +31,7 @@ final class Prefs {
     static final String KEY_WIFI = "wifi_replace";
     static final String KEY_STYLE = "bar_style";
     static final String KEY_WIFI_STYLE = "wifi_style";
+    static final String KEY_WIFI_EXTRAS = "wifi_extras";
     static final String KEY_LABEL = "show_label";
     static final String KEY_LABEL_DATA = "label_data_only";
 
@@ -44,10 +45,30 @@ final class Prefs {
     static volatile boolean fiveA = false;
     // 替换系统 WiFi 图标
     static volatile boolean wifiReplace = true;
-    // 信号格样式：0 圆润、1 方正
+    // 信号样式：0 圆润、1 方正、2 感叹号圆润、3 感叹号方正
     static volatile int style = 0;
     // WiFi 样式：0 圆润、1 方正
     static volatile int wifiStyle = 0;
+    // WiFi 图标上显示 6 / 7 等级和上下行箭头
+    static volatile boolean wifiExtras = true;
+
+    /** 样式值里的"方正"和"感叹号"两个维度。 */
+    static boolean isSquare(int style) {
+        return style == 1 || style == 3;
+    }
+
+    static boolean isIos(int style) {
+        return style >= 2;
+    }
+
+    static int parseStyle(String val) {
+        try {
+            int v = Integer.parseInt(val);
+            return v >= 0 && v <= 3 ? v : 0;
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static Context app;
@@ -147,7 +168,7 @@ final class Prefs {
     }
 
     private static boolean load(Context c) {
-        boolean a = false, w = true, lb = true, ld = false;
+        boolean a = false, w = true, lb = true, ld = false, we = true;
         int s = 0, ws = 0;
         Cursor cur = null;
         try {
@@ -163,8 +184,9 @@ final class Prefs {
                 else if (KEY_WIFI.equals(key)) w = "1".equals(val);
                 else if (KEY_LABEL.equals(key)) lb = "1".equals(val);
                 else if (KEY_LABEL_DATA.equals(key)) ld = "1".equals(val);
-                else if (KEY_STYLE.equals(key)) s = "1".equals(val) ? 1 : 0;
+                else if (KEY_STYLE.equals(key)) s = parseStyle(val);
                 else if (KEY_WIFI_STYLE.equals(key)) ws = "1".equals(val) ? 1 : 0;
+                else if (KEY_WIFI_EXTRAS.equals(key)) we = "1".equals(val);
             }
         } catch (Throwable t) {
             log("prefs load failed: " + t);
@@ -178,8 +200,9 @@ final class Prefs {
         wifiReplace = w;
         style = s;
         wifiStyle = ws;
+        wifiExtras = we;
         loaded = true;
-        log("prefs label=" + lb + " dataOnly=" + ld + " cellular=" + onCellular + " fiveA=" + a + " wifi=" + w + " style=" + s + " wifiStyle=" + ws);
+        log("prefs label=" + lb + " dataOnly=" + ld + " cellular=" + onCellular + " fiveA=" + a + " wifi=" + w + " style=" + s + " wifiStyle=" + ws + " wifiExtras=" + we);
         return true;
     }
 

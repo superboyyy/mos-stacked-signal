@@ -33,6 +33,7 @@ public class SettingsProvider extends ContentProvider {
         c.addRow(new Object[] {Prefs.KEY_WIFI, p.getBoolean(Prefs.KEY_WIFI, true) ? "1" : "0"});
         c.addRow(new Object[] {Prefs.KEY_STYLE, String.valueOf(p.getInt(Prefs.KEY_STYLE, 0))});
         c.addRow(new Object[] {Prefs.KEY_WIFI_STYLE, String.valueOf(p.getInt(Prefs.KEY_WIFI_STYLE, 0))});
+        c.addRow(new Object[] {Prefs.KEY_WIFI_EXTRAS, p.getBoolean(Prefs.KEY_WIFI_EXTRAS, true) ? "1" : "0"});
         return c;
     }
 

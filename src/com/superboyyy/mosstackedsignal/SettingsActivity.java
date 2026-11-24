@@ -28,9 +28,11 @@ public class SettingsActivity extends Activity {
     /** 「5GA 显示为 5A」「仅当使用流量时显示」：关掉网络类型标识时它们不起作用，置灰。 */
     private View fiveARow;
     private View dataOnlyRow;
-    private final RadioButton[] styleButtons = new RadioButton[2];
+    private View labelRow;
+    private View wifiExtrasRow;
+    private LinearLayout wifiStyleCard;
+    private final RadioButton[] styleButtons = new RadioButton[4];
     private final RadioButton[] wifiStyleButtons = new RadioButton[2];
-    private final StylePreview[] stylePreviews = new StylePreview[2];
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,41 +79,49 @@ public class SettingsActivity extends Activity {
         stackTip.setPadding(0, 0, 0, dp(16));
         root.addView(stackTip);
 
-        // 显示
-        root.addView(sectionTitle("显示", fg2));
+        // 信号：开关一张卡，样式一张卡
+        root.addView(sectionTitle("信号", fg2));
         LinearLayout card1 = card();
-        card1.addView(switchRow("显示网络类型标识", "关闭后只显示信号格，不显示 5G、4G 等标识", Prefs.KEY_LABEL, true, fg, fg2));
+        labelRow = switchRow("显示网络类型标识", "关闭后只显示信号格，不显示 5G、4G 等标识", Prefs.KEY_LABEL, true, fg, fg2);
+        card1.addView(labelRow);
         card1.addView(divider());
         dataOnlyRow = switchRow("仅当使用流量时显示网络标识", "连着 WiFi 时不显示 5G、4G 等标识", Prefs.KEY_LABEL_DATA, false, fg, fg2);
-        setRowEnabled(dataOnlyRow, prefs.getBoolean(Prefs.KEY_LABEL, true));
         card1.addView(dataOnlyRow);
         card1.addView(divider());
         fiveARow = switchRow("5GA 显示为 5A", "网络类型是 5GA 时，标识只显示 5A", Prefs.KEY_FIVE_A, false, fg, fg2);
-        setRowEnabled(fiveARow, prefs.getBoolean(Prefs.KEY_LABEL, true));
         card1.addView(fiveARow);
-        card1.addView(divider());
-        card1.addView(switchRow("替换 WiFi 图标", "关闭后使用系统原生的 WiFi 图标", Prefs.KEY_WIFI, true, fg, fg2));
         root.addView(card1);
 
-        // 信号样式
-        root.addView(sectionTitle("信号样式", fg2));
-        int cur = prefs.getInt(Prefs.KEY_STYLE, 0) == 1 ? 1 : 0;
+        int cur = Prefs.parseStyle(String.valueOf(prefs.getInt(Prefs.KEY_STYLE, 0)));
         LinearLayout card2 = card();
-        stylePreviews[0] = new StylePreview(this, 0, fg);
-        stylePreviews[1] = new StylePreview(this, 1, fg);
-        card2.addView(styleRow(stylePreviews[0], Prefs.KEY_STYLE, 0, styleButtons, "圆润（默认）", "圆头竖条", cur == 0, fg, fg2));
+        card2.addView(styleRow(new StylePreview(this, 0, fg), Prefs.KEY_STYLE, 0, styleButtons, "圆润（默认）", "圆头竖条", cur == 0, fg, fg2));
         card2.addView(divider());
-        card2.addView(styleRow(stylePreviews[1], Prefs.KEY_STYLE, 1, styleButtons, "方正", "直角竖条", cur == 1, fg, fg2));
+        card2.addView(styleRow(new StylePreview(this, 1, fg), Prefs.KEY_STYLE, 1, styleButtons, "方正", "直角竖条", cur == 1, fg, fg2));
+        card2.addView(divider());
+        card2.addView(styleRow(new StylePreview(this, 2, fg), Prefs.KEY_STYLE, 2, styleButtons, "感叹号圆润", "上排竖条是卡 1，下排的点是卡 2", cur == 2, fg, fg2));
+        card2.addView(divider());
+        card2.addView(styleRow(new StylePreview(this, 3, fg), Prefs.KEY_STYLE, 3, styleButtons, "感叹号方正", "同上，直角", cur == 3, fg, fg2));
         root.addView(card2);
+        refreshLabelRows();
 
-        // WiFi 样式（只在「替换 WiFi 图标」打开时生效）
-        root.addView(sectionTitle("WiFi 样式", fg2));
-        int wcur = prefs.getInt(Prefs.KEY_WIFI_STYLE, 0) == 1 ? 1 : 0;
+        // WiFi：开关一张卡，样式一张卡（关掉「替换 WiFi 图标」时下面的都置灰）
+        root.addView(sectionTitle("WiFi", fg2));
+        boolean wifiOn = prefs.getBoolean(Prefs.KEY_WIFI, true);
         LinearLayout card3 = card();
-        card3.addView(styleRow(new WifiPreview(this, false, fg), Prefs.KEY_WIFI_STYLE, 0, wifiStyleButtons, "圆润（默认）", "圆点、圆头弧线", wcur == 0, fg, fg2));
+        card3.addView(switchRow("替换 WiFi 图标", "关闭后使用系统原生的 WiFi 图标", Prefs.KEY_WIFI, true, fg, fg2));
         card3.addView(divider());
-        card3.addView(styleRow(new WifiPreview(this, true, fg), Prefs.KEY_WIFI_STYLE, 1, wifiStyleButtons, "方正", "尖角扇形、直边扇环", wcur == 1, fg, fg2));
+        wifiExtrasRow = switchRow("显示 WiFi 等级和上下行箭头", "关闭后不显示 WiFi 6 / 7 的数字和上下行箭头", Prefs.KEY_WIFI_EXTRAS, true, fg, fg2);
+        setRowEnabled(wifiExtrasRow, wifiOn);
+        card3.addView(wifiExtrasRow);
         root.addView(card3);
+
+        int wcur = Prefs.parseStyle(String.valueOf(prefs.getInt(Prefs.KEY_WIFI_STYLE, 0))) % 2;
+        wifiStyleCard = card();
+        wifiStyleCard.addView(styleRow(new WifiPreview(this, 0, fg), Prefs.KEY_WIFI_STYLE, 0, wifiStyleButtons, "圆润（默认）", "圆点、圆头弧线", wcur == 0, fg, fg2));
+        wifiStyleCard.addView(divider());
+        wifiStyleCard.addView(styleRow(new WifiPreview(this, 1, fg), Prefs.KEY_WIFI_STYLE, 1, wifiStyleButtons, "方正", "尖角扇形、直边扇环", wcur == 1, fg, fg2));
+        setRowEnabled(wifiStyleCard, wifiOn);
+        root.addView(wifiStyleCard);
 
         TextView note = text("设置改动一般 1 秒内自动生效；如果状态栏没有变化或产生问题，请执行软重启。", 13, fg2, false);
         note.setPadding(dp(4), dp(8), dp(4), 0);
@@ -136,14 +146,13 @@ public class SettingsActivity extends Activity {
         sw.setOnCheckedChangeListener((b, on) -> {
             prefs.edit().putBoolean(key, on).apply();
             notifyChanged();
-            // 关掉标识时：两个依赖它的开关置灰，示意图也去掉标识
-            if (Prefs.KEY_LABEL.equals(key)) {
-                setRowEnabled(dataOnlyRow, on);
-                setRowEnabled(fiveARow, on);
-                for (StylePreview p : stylePreviews) {
-                    if (p != null) p.invalidate();
-                }
+            // 示意图跟着显示或隐藏标识
+            if (Prefs.KEY_WIFI.equals(key)) {
+                setRowEnabled(wifiExtrasRow, on);
+                setRowEnabled(wifiStyleCard, on);
             }
+            if (Prefs.KEY_LABEL.equals(key)) refreshLabelRows();
+            if (Prefs.KEY_LABEL.equals(key)) invalidatePreviews(getWindow().getDecorView());
         });
         row.addView(sw);
         row.setOnClickListener(v -> sw.toggle());
@@ -174,11 +183,19 @@ public class SettingsActivity extends Activity {
             for (int i = 0; i < group.length; i++) group[i].setChecked(i == value);
             prefs.edit().putInt(key, value).apply();
             notifyChanged();
+            if (Prefs.KEY_STYLE.equals(key)) refreshLabelRows();
         });
         return row;
     }
 
     // 置灰：整行变淡，开关和整行都点不动（设置值保留，重新打开标识后照旧生效）
+    /** 「仅当使用流量时显示」和「5GA 显示为 5A」跟着「显示网络类型标识」走（普通样式和感叹号样式都一样）。 */
+    private void refreshLabelRows() {
+        boolean label = prefs.getBoolean(Prefs.KEY_LABEL, true);
+        setRowEnabled(dataOnlyRow, label);
+        setRowEnabled(fiveARow, label);
+    }
+
     private static void setRowEnabled(View row, boolean on) {
         if (row == null) return;
         row.setAlpha(on ? 1f : 0.38f);
@@ -255,15 +272,26 @@ public class SettingsActivity extends Activity {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
-    /** 样式预览：两行 "5G + 信号格"，画法和状态栏里一致（0 圆润、1 方正）；关掉标识时只画信号格。 */
+    // 「显示网络类型标识」变了：所有信号示意图重画
+    private static void invalidatePreviews(View v) {
+        if (v instanceof StylePreview) v.invalidate();
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) invalidatePreviews(g.getChildAt(i));
+        }
+    }
+
+    /** 样式示意图：圆润 / 方正是两行 "5G + 信号格"，感叹号是上排竖条加下排点；画法和状态栏里一致。 */
     static final class StylePreview extends View {
         private final int style;
+        private final int color;
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rect = new RectF();
 
         StylePreview(Context c, int style, int color) {
             super(c);
             this.style = style;
+            this.color = color;
             paint.setColor(color);
             paint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         }
@@ -271,9 +299,64 @@ public class SettingsActivity extends Activity {
         @Override
         protected void onDraw(Canvas canvas) {
             float h = getHeight(), w = getWidth();
-            // 图形缩小到 80%，左对齐、垂直居中；控件本身大小不变，不影响行高和右边文字的位置
+            // 图形缩小到 80%，在控件里左右、上下都居中；控件本身大小不变，不影响行高和右边文字的位置
             canvas.save();
-            canvas.scale(0.8f, 0.8f, 0f, h / 2f);
+            canvas.scale(0.8f, 0.8f, w / 2f, h / 2f);
+            if (Prefs.isIos(style)) {
+                paint.setStyle(Paint.Style.FILL);
+                int a = Color.alpha(color);
+                // 5 列，总宽和普通样式的 5 格竖条一样
+                float rowH0 = (h - h * 0.12f) / 2f, barW0 = rowH0 * 0.4f;
+                float barsW = 5 * barW0 + 4 * barW0 * 0.45f;
+                float[] barH = new float[5];
+                // 打开了「用流量时显示网络标识」：示意图也画上 5G 和 ^ˇ（和状态栏一样的摆法和比例）
+                boolean lbl = SettingsProvider.prefs(getContext()).getBoolean(Prefs.KEY_LABEL, true);
+                float colW = IosSignal.colWidth(barsW, 5), margin = h * 0.05f, aGap = h * 0.08f;
+                float lw = 0f, lh = 0f, extra = 0f;
+                android.graphics.Rect tb = new android.graphics.Rect();
+                if (lbl) {
+                    paint.setTextSize(100f);
+                    paint.getTextBounds("5G", 0, 2, tb);
+                    paint.setTextSize(h * 0.45f * 100f / Math.max(1, tb.height()));
+                    paint.getTextBounds("5G", 0, 2, tb);
+                    lw = tb.width();
+                    lh = tb.height();
+                    extra = Math.max(lw - colW, h * 0.24f + h * 0.035f + aGap);
+                }
+                float left = (w - barsW - extra) / 2f + extra;
+                if (lbl) {
+                    paint.setStyle(Paint.Style.FILL);
+                    paint.setAlpha(a);
+                    canvas.drawText("5G", left + colW - lw - tb.left, -tb.top, paint);
+                    float cw = h * 0.24f, ch = cw * 0.55f, half = h * 0.07f / 2f;
+                    float cxA = left - aGap - half - cw / 2f;
+                    // ^ 顶边对齐第一列竖条顶边，ˇ 底边对齐第一列下排点的底边（和状态栏一样）
+                    IosSignal.barHeights(barH, h, barsW, 5, colW, lh, margin);
+                    float upCy = IosSignal.barsRowHeight(h, barsW, 5) - barH[0] + half + ch / 2f;
+                    float downCy = h - half - ch / 2f;
+                    paint.setStyle(Paint.Style.STROKE);
+                    paint.setStrokeWidth(h * 0.07f);
+                    paint.setStrokeCap(Paint.Cap.ROUND);
+                    paint.setStrokeJoin(Paint.Join.ROUND);
+                    android.graphics.Path ap = new android.graphics.Path();
+                    for (int k = 0; k < 2; k++) {
+                        boolean up = k == 0;
+                        float cyk = up ? upCy : downCy;
+                        ap.reset();
+                        ap.moveTo(cxA - cw / 2f, up ? cyk + ch / 2f : cyk - ch / 2f);
+                        ap.lineTo(cxA, up ? cyk - ch / 2f : cyk + ch / 2f);
+                        ap.lineTo(cxA + cw / 2f, up ? cyk + ch / 2f : cyk - ch / 2f);
+                        // 示意：下行亮、上行暗
+                        paint.setAlpha(up ? Math.round(a * 0.3f) : a);
+                        canvas.drawPath(ap, paint);
+                    }
+                    paint.setStyle(Paint.Style.FILL);
+                }
+                IosSignal.barHeights(barH, h, barsW, 5, lbl ? colW : 0f, lh, margin);
+                IosSignal.draw(canvas, paint, rect, left, 0f, h, barsW, 5, barH, 4, 3, Prefs.isSquare(style), color, a, Math.round(a * 0.3f));
+                canvas.restore();
+                return;
+            }
             float gapRow = h * 0.12f, rowH = (h - gapRow) / 2f;
             float barW = rowH * 0.4f, space = barW * 0.45f;
             boolean showLabel = SettingsProvider.prefs(getContext()).getBoolean(Prefs.KEY_LABEL, true);
@@ -288,6 +371,7 @@ public class SettingsActivity extends Activity {
                 paint.setAlpha(255);
                 if (showLabel) canvas.drawText("5G", x0, bottom, paint);
                 float x = x0 + labelW + labelGap;
+                paint.setColor(color);
                 float minH = style == 1 ? rowH * 0.3f : Math.max(barW, rowH * 0.35f);
                 float radius = style == 1 ? 0f : barW / 2f;
                 for (int i = 0; i < 5; i++) {
@@ -310,21 +394,21 @@ public class SettingsActivity extends Activity {
         private final RectF oval = new RectF();
         private final int color;
 
-        WifiPreview(Context c, boolean square, int color) {
+        WifiPreview(Context c, int style, int color) {
             super(c);
-            this.square = square;
+            this.square = Prefs.isSquare(style);
             this.color = color;
         }
 
         @Override
         protected void onDraw(Canvas canvas) {
             float h = getHeight();
-            // 和信号示意图一样：缩到 80%，左对齐、垂直居中
+            // 和信号示意图一样：缩到 80%，左右、上下都居中
             canvas.save();
-            canvas.scale(0.8f, 0.8f, 0f, h / 2f);
+            canvas.scale(0.8f, 0.8f, getWidth() / 2f, h / 2f);
             float f = h * 0.8f;
             float bottom = (h + f) / 2f;
-            float cx = getWidth() / 2f; // 和信号示意图同一条中线
+            float cx = getWidth() / 2f;
             WifiFan.draw(canvas, paint, path, oval, square, cx, bottom - WifiFan.dotR(f), f, 3, color,
                     Color.alpha(color), Math.round(Color.alpha(color) * 0.3f), null, 0f);
             canvas.restore();
