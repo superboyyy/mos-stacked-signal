@@ -34,13 +34,15 @@ final class StackedSignalDrawable extends Drawable {
     static final int LABEL_WEIGHT = 650;
     /** 感叹号样式的列数。 */
     private static final int IOS_COLUMNS = 5;
+    /** 感叹号样式网络类型的字重（不描边，比普通样式的 650 + 描边略粗一点）。 */
+    private static final int IOS_LABEL_WEIGHT = 750;
     /** 感叹号样式：网络类型墨迹高 = 信号高度的这么多（再大第一列竖条就要压矮，和下面的点不一样高了）。 */
     private static final float IOS_LABEL_RATIO = 0.45f;
     /** 感叹号样式：网络类型和被它盖住的竖条之间的空隙。 */
     private static final float IOS_LABEL_MARGIN = 0.05f;
     /** 感叹号样式的 ^ˇ：宽、线粗、和第一列竖条的固定间距（都按信号高度算，不随网络类型的宽度变）。 */
     private static final float IOS_ARROW_W = 0.24f;
-    private static final float IOS_ARROW_STROKE = 0.07f;
+    private static final float IOS_ARROW_STROKE = 0.085f;
     private static final float IOS_ARROW_GAP = 0.08f;
 
     /** 标识文字的描边宽度，WiFi 上的 "6" / "7" 跟着用，粗细一致。 */
@@ -197,7 +199,7 @@ final class StackedSignalDrawable extends Drawable {
         }
         hidden = airplane;
         width = airplane ? 0 : pad + (labelW > 0 ? labelW + gap : 0) + barsWidth() + pad;
-        if (ios && !airplane) layoutIos();
+        if (ios && !airplane) layoutIos(combo);
         if (changed) {
             StatusBarViews.log("labels=" + Arrays.toString(newLabels) + " activity=" + Arrays.toString(newActivity)
                     + " ink=" + Arrays.toString(inkWidth) + " spacing=" + Arrays.toString(labelSpacing)
@@ -207,14 +209,15 @@ final class StackedSignalDrawable extends Drawable {
     }
 
     /** 感叹号样式：5 列，总宽和普通样式不显示标识时一样；网络类型右边和第一列竖条右边对齐，往左伸出去。 */
-    private void layoutIos() {
+    private void layoutIos(LinearLayout combo) {
         iosBarsW = IOS_COLUMNS * barW() + (IOS_COLUMNS - 1) * barSpace();
         if (iosBarH.length != IOS_COLUMNS) iosBarH = new float[IOS_COLUMNS];
         float colW = IosSignal.colWidth(iosBarsW, IOS_COLUMNS);
         float labelH = 0f, margin = 0f;
         iosLeftExtra = 0f;
         if (iosLabel != null) {
-            iosLabelPaint.setTypeface(textPaint.getTypeface());
+            Typeface clock = StatusBarViews.clockTypeface(combo);
+            iosLabelPaint.setTypeface(Typeface.create(clock != null ? clock : Typeface.DEFAULT, IOS_LABEL_WEIGHT, false));
             iosLabelPaint.setStyle(Paint.Style.FILL);
             iosLabelPaint.setTextAlign(Paint.Align.LEFT);
             iosLabelPaint.setTextSize(100f);

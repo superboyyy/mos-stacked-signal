@@ -321,21 +321,21 @@ public class SettingsActivity extends Activity {
                     paint.getTextBounds("5G", 0, 2, tb);
                     lw = tb.width();
                     lh = tb.height();
-                    extra = Math.max(lw - colW, h * 0.24f + h * 0.035f + aGap);
+                    extra = Math.max(lw - colW, h * 0.24f + h * 0.0425f + aGap);
                 }
                 float left = (w - barsW - extra) / 2f + extra;
                 if (lbl) {
                     paint.setStyle(Paint.Style.FILL);
                     paint.setAlpha(a);
                     canvas.drawText("5G", left + colW - lw - tb.left, -tb.top, paint);
-                    float cw = h * 0.24f, ch = cw * 0.55f, half = h * 0.07f / 2f;
+                    float cw = h * 0.24f, ch = cw * 0.55f, half = h * 0.085f / 2f;
                     float cxA = left - aGap - half - cw / 2f;
                     // ^ 顶边对齐第一列竖条顶边，ˇ 底边对齐第一列下排点的底边（和状态栏一样）
                     IosSignal.barHeights(barH, h, barsW, 5, colW, lh, margin);
                     float upCy = IosSignal.barsRowHeight(h, barsW, 5) - barH[0] + half + ch / 2f;
                     float downCy = h - half - ch / 2f;
                     paint.setStyle(Paint.Style.STROKE);
-                    paint.setStrokeWidth(h * 0.07f);
+                    paint.setStrokeWidth(h * 0.085f);
                     paint.setStrokeCap(Paint.Cap.ROUND);
                     paint.setStrokeJoin(Paint.Join.ROUND);
                     android.graphics.Path ap = new android.graphics.Path();
