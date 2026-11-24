@@ -1,6 +1,9 @@
 package com.superboyyy.mosstackedsignal;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.database.ContentObserver;
 import android.database.Cursor;
 import android.net.Uri;
@@ -28,7 +31,15 @@ final class Prefs {
     static final String KEY_WIFI = "wifi_replace";
     static final String KEY_STYLE = "bar_style";
     static final String KEY_WIFI_STYLE = "wifi_style";
+    static final String KEY_LABEL = "show_label";
+    static final String KEY_LABEL_DATA = "label_data_only";
 
+    // 显示网络类型标识（5G、4G 等）
+    static volatile boolean showLabel = true;
+    // 仅当使用流量（默认网络是蜂窝、不是 WiFi）时显示标识
+    static volatile boolean labelDataOnly = false;
+    // 当前默认网络是不是蜂窝数据（系统回调更新）
+    static volatile boolean onCellular = true;
     // 5GA 只显示 5A
     static volatile boolean fiveA = false;
     // 替换系统 WiFi 图标
@@ -42,6 +53,7 @@ final class Prefs {
     private static Context app;
     private static volatile boolean loaded;
     private static boolean observing;
+    private static boolean netWatching;
     private static long lastTry;
     private static String lastLog;
 
@@ -52,7 +64,7 @@ final class Prefs {
      * （开机早期模块的 Provider 可能还起不来），读到后只靠变化通知，不再轮询。
      */
     static void poll(View view) {
-        if (loaded && observing) return;
+        if (loaded && observing && netWatching) return;
         long now = SystemClock.uptimeMillis();
         if (lastTry != 0 && now - lastTry < 5000) return;
         lastTry = now;
@@ -74,7 +86,49 @@ final class Prefs {
                 log("prefs observe failed: " + t);
             }
         }
+        if (!netWatching) watchNetwork(c);
         if (!loaded) loadAsync(c);
+    }
+
+    static boolean labelVisible() {
+        return showLabel && (!labelDataOnly || onCellular);
+    }
+
+    // 跟着系统默认网络走：切到 WiFi / 切回流量时重画（只在打开了「仅当使用流量时显示」时才需要）
+    private static void watchNetwork(Context c) {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) c.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return;
+            onCellular = isCellular(cm.getNetworkCapabilities(cm.getActiveNetwork()));
+            cm.registerDefaultNetworkCallback(new ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onCapabilitiesChanged(Network network, NetworkCapabilities caps) {
+                    setCellular(isCellular(caps));
+                }
+
+                @Override
+                public void onLost(Network network) {
+                    setCellular(false);
+                }
+            }, MAIN);
+            netWatching = true;
+        } catch (Throwable t) {
+            netWatching = true;
+            log("network watch failed: " + t);
+        }
+    }
+
+    // VPN 的能力里带着底层网络的传输类型，所以开着 VPN 走流量也算蜂窝
+    private static boolean isCellular(NetworkCapabilities caps) {
+        return caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                && !caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+    }
+
+    private static void setCellular(boolean v) {
+        if (v == onCellular) return;
+        onCellular = v;
+        log("default network cellular=" + v);
+        if (labelDataOnly && showLabel) redraw();
     }
 
     // 查询会拉起模块进程，放到后台线程，读完回主线程重画
@@ -93,7 +147,7 @@ final class Prefs {
     }
 
     private static boolean load(Context c) {
-        boolean a = false, w = true;
+        boolean a = false, w = true, lb = true, ld = false;
         int s = 0, ws = 0;
         Cursor cur = null;
         try {
@@ -107,6 +161,8 @@ final class Prefs {
                 String val = cur.getString(1);
                 if (KEY_FIVE_A.equals(key)) a = "1".equals(val);
                 else if (KEY_WIFI.equals(key)) w = "1".equals(val);
+                else if (KEY_LABEL.equals(key)) lb = "1".equals(val);
+                else if (KEY_LABEL_DATA.equals(key)) ld = "1".equals(val);
                 else if (KEY_STYLE.equals(key)) s = "1".equals(val) ? 1 : 0;
                 else if (KEY_WIFI_STYLE.equals(key)) ws = "1".equals(val) ? 1 : 0;
             }
@@ -117,11 +173,13 @@ final class Prefs {
             if (cur != null) cur.close();
         }
         fiveA = a;
+        showLabel = lb;
+        labelDataOnly = ld;
         wifiReplace = w;
         style = s;
         wifiStyle = ws;
         loaded = true;
-        log("prefs fiveA=" + a + " wifi=" + w + " style=" + s + " wifiStyle=" + ws);
+        log("prefs label=" + lb + " dataOnly=" + ld + " cellular=" + onCellular + " fiveA=" + a + " wifi=" + w + " style=" + s + " wifiStyle=" + ws);
         return true;
     }
 

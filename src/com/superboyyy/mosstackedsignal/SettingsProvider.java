@@ -27,6 +27,8 @@ public class SettingsProvider extends ContentProvider {
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
         SharedPreferences p = prefs(getContext());
         MatrixCursor c = new MatrixCursor(new String[] {"key", "value"});
+        c.addRow(new Object[] {Prefs.KEY_LABEL, p.getBoolean(Prefs.KEY_LABEL, true) ? "1" : "0"});
+        c.addRow(new Object[] {Prefs.KEY_LABEL_DATA, p.getBoolean(Prefs.KEY_LABEL_DATA, false) ? "1" : "0"});
         c.addRow(new Object[] {Prefs.KEY_FIVE_A, p.getBoolean(Prefs.KEY_FIVE_A, false) ? "1" : "0"});
         c.addRow(new Object[] {Prefs.KEY_WIFI, p.getBoolean(Prefs.KEY_WIFI, true) ? "1" : "0"});
         c.addRow(new Object[] {Prefs.KEY_STYLE, String.valueOf(p.getInt(Prefs.KEY_STYLE, 0))});

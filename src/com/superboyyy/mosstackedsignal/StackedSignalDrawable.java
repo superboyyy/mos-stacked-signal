@@ -73,7 +73,8 @@ final class StackedSignalDrawable extends Drawable {
             int count = level != null ? level[1] : SignalInfo.barCount;
             newCounts[i] = count;
             newLevels[i] = level != null ? Math.max(0, Math.min(level[0], count)) : 0;
-            newLabels[i] = SignalInfo.label(sim);
+            // 关掉「显示网络类型标识」，或打开「仅当使用流量时显示」且当前走 WiFi 时，不画标识，信号格左移、整体变窄
+            newLabels[i] = Prefs.labelVisible() ? SignalInfo.label(sim) : null;
         }
         int[] newActivity = SignalInfo.activities(combo);
         int newColor = SignalInfo.color(combo);

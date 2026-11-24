@@ -25,8 +25,12 @@ import android.widget.TextView;
 public class SettingsActivity extends Activity {
 
     private SharedPreferences prefs;
+    /** 「5GA 显示为 5A」「仅当使用流量时显示」：关掉网络类型标识时它们不起作用，置灰。 */
+    private View fiveARow;
+    private View dataOnlyRow;
     private final RadioButton[] styleButtons = new RadioButton[2];
     private final RadioButton[] wifiStyleButtons = new RadioButton[2];
+    private final StylePreview[] stylePreviews = new StylePreview[2];
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -76,7 +80,15 @@ public class SettingsActivity extends Activity {
         // 显示
         root.addView(sectionTitle("显示", fg2));
         LinearLayout card1 = card();
-        card1.addView(switchRow("5GA 显示为 5A", "网络类型是 5GA 时，标识只显示 5A", Prefs.KEY_FIVE_A, false, fg, fg2));
+        card1.addView(switchRow("显示网络类型标识", "关闭后只显示信号格，不显示 5G、4G 等标识", Prefs.KEY_LABEL, true, fg, fg2));
+        card1.addView(divider());
+        dataOnlyRow = switchRow("仅当使用流量时显示网络标识", "连着 WiFi 时不显示 5G、4G 等标识", Prefs.KEY_LABEL_DATA, false, fg, fg2);
+        setRowEnabled(dataOnlyRow, prefs.getBoolean(Prefs.KEY_LABEL, true));
+        card1.addView(dataOnlyRow);
+        card1.addView(divider());
+        fiveARow = switchRow("5GA 显示为 5A", "网络类型是 5GA 时，标识只显示 5A", Prefs.KEY_FIVE_A, false, fg, fg2);
+        setRowEnabled(fiveARow, prefs.getBoolean(Prefs.KEY_LABEL, true));
+        card1.addView(fiveARow);
         card1.addView(divider());
         card1.addView(switchRow("替换 WiFi 图标", "关闭后使用系统原生的 WiFi 图标", Prefs.KEY_WIFI, true, fg, fg2));
         root.addView(card1);
@@ -85,9 +97,11 @@ public class SettingsActivity extends Activity {
         root.addView(sectionTitle("信号样式", fg2));
         int cur = prefs.getInt(Prefs.KEY_STYLE, 0) == 1 ? 1 : 0;
         LinearLayout card2 = card();
-        card2.addView(styleRow(new StylePreview(this, 0, fg), Prefs.KEY_STYLE, 0, styleButtons, "圆润（默认）", "圆头竖条", cur == 0, fg, fg2));
+        stylePreviews[0] = new StylePreview(this, 0, fg);
+        stylePreviews[1] = new StylePreview(this, 1, fg);
+        card2.addView(styleRow(stylePreviews[0], Prefs.KEY_STYLE, 0, styleButtons, "圆润（默认）", "圆头竖条", cur == 0, fg, fg2));
         card2.addView(divider());
-        card2.addView(styleRow(new StylePreview(this, 1, fg), Prefs.KEY_STYLE, 1, styleButtons, "方正", "直角竖条", cur == 1, fg, fg2));
+        card2.addView(styleRow(stylePreviews[1], Prefs.KEY_STYLE, 1, styleButtons, "方正", "直角竖条", cur == 1, fg, fg2));
         root.addView(card2);
 
         // WiFi 样式（只在「替换 WiFi 图标」打开时生效）
@@ -122,6 +136,14 @@ public class SettingsActivity extends Activity {
         sw.setOnCheckedChangeListener((b, on) -> {
             prefs.edit().putBoolean(key, on).apply();
             notifyChanged();
+            // 关掉标识时：两个依赖它的开关置灰，示意图也去掉标识
+            if (Prefs.KEY_LABEL.equals(key)) {
+                setRowEnabled(dataOnlyRow, on);
+                setRowEnabled(fiveARow, on);
+                for (StylePreview p : stylePreviews) {
+                    if (p != null) p.invalidate();
+                }
+            }
         });
         row.addView(sw);
         row.setOnClickListener(v -> sw.toggle());
@@ -154,6 +176,21 @@ public class SettingsActivity extends Activity {
             notifyChanged();
         });
         return row;
+    }
+
+    // 置灰：整行变淡，开关和整行都点不动（设置值保留，重新打开标识后照旧生效）
+    private static void setRowEnabled(View row, boolean on) {
+        if (row == null) return;
+        row.setAlpha(on ? 1f : 0.38f);
+        setEnabledDeep(row, on);
+    }
+
+    private static void setEnabledDeep(View v, boolean on) {
+        v.setEnabled(on);
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) setEnabledDeep(g.getChildAt(i), on);
+        }
     }
 
     // 通知 SystemUI 重读设置
@@ -218,7 +255,7 @@ public class SettingsActivity extends Activity {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
-    /** 样式预览：两行 "5G + 信号格"，画法和状态栏里一致（0 圆润、1 方正）。 */
+    /** 样式预览：两行 "5G + 信号格"，画法和状态栏里一致（0 圆润、1 方正）；关掉标识时只画信号格。 */
     static final class StylePreview extends View {
         private final int style;
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -239,16 +276,18 @@ public class SettingsActivity extends Activity {
             canvas.scale(0.8f, 0.8f, 0f, h / 2f);
             float gapRow = h * 0.12f, rowH = (h - gapRow) / 2f;
             float barW = rowH * 0.4f, space = barW * 0.45f;
+            boolean showLabel = SettingsProvider.prefs(getContext()).getBoolean(Prefs.KEY_LABEL, true);
             paint.setTextSize(rowH * 1.3f);
-            float labelW = paint.measureText("5G");
+            float labelW = showLabel ? paint.measureText("5G") : 0f;
+            float labelGap = showLabel ? rowH * 0.25f : 0f;
             float barsW = 5 * barW + 4 * space;
-            float x0 = (w - (labelW + rowH * 0.25f + barsW)) / 2f;
+            float x0 = (w - (labelW + labelGap + barsW)) / 2f;
             int[] levels = {4, 3};
             for (int r = 0; r < 2; r++) {
                 float bottom = rowH * (r + 1) + gapRow * r;
                 paint.setAlpha(255);
-                canvas.drawText("5G", x0, bottom, paint);
-                float x = x0 + labelW + rowH * 0.25f;
+                if (showLabel) canvas.drawText("5G", x0, bottom, paint);
+                float x = x0 + labelW + labelGap;
                 float minH = style == 1 ? rowH * 0.3f : Math.max(barW, rowH * 0.35f);
                 float radius = style == 1 ? 0f : barW / 2f;
                 for (int i = 0; i < 5; i++) {
@@ -285,8 +324,7 @@ public class SettingsActivity extends Activity {
             canvas.scale(0.8f, 0.8f, 0f, h / 2f);
             float f = h * 0.8f;
             float bottom = (h + f) / 2f;
-            float halfW = square ? f * WifiFan.SQ_SIN : f * 0.64f;
-            float cx = getWidth() * 0.03f + halfW;
+            float cx = getWidth() / 2f; // 和信号示意图同一条中线
             WifiFan.draw(canvas, paint, path, oval, square, cx, bottom - WifiFan.dotR(f), f, 3, color,
                     Color.alpha(color), Math.round(Color.alpha(color) * 0.3f), null, 0f);
             canvas.restore();
