@@ -11,9 +11,10 @@ import android.graphics.RectF;
  * 和 iOS 的比例一致；左右方向（列宽、列间距）按 w 算。
  */
 final class IosSignal {
-    // 从 iOS 截图量的比例（总高 44.5）：列宽 11、列间距 7；竖条和点之间比 iOS 紧一点（4.5 -> 3）。
+    // 从 iOS 截图量的比例（总高 44.5）：列宽 11、列间距 7；状态栏里竖条看着比 WiFi 弧线细，
+    // 总宽不变、列加粗一点（11:7 -> 12:6，约 6.5px -> 7px）；竖条和点之间比 iOS 紧一点（4.5 -> 3）。
     // 下排的点比 iOS 矮一点（11 -> 9.5）；第一根竖条和它下面的点一样高，往右均匀加高到 32（= 总高 - 点 - 间距）
-    private static final float COL_W = 11f, COL_GAP = 7f, DOT_H = 9.5f, ROW_GAP = 3f, BAR_MIN = DOT_H;
+    private static final float COL_W = 12f, COL_GAP = 6f, DOT_H = 9.5f, ROW_GAP = 3f, BAR_MIN = DOT_H;
     private static final float FULL_UNIT = 44.5f;
     private static final float ROUND_RADIUS = 0.45f;
 
